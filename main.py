@@ -43,6 +43,7 @@ collection = currentdb[mongocollection]
 screenshotcollection = currentdb[mongoscreenshotcollection]
 collection.create_index([('md5', pymongo.TEXT)], name='md5_index', unique=True)
 collection.create_index('vision_tags')
+screenshotcollection.create_index([('md5', pymongo.TEXT)], name='md5_index', unique=True)
 
 
 # list all subdirectories in a given folder
@@ -117,7 +118,7 @@ def main():
             workingdir = allfolders.pop(0)
             workingimages = listimages(workingdir)
             for imagepath in workingimages:
-                # TODO: check file path for "screenshot, update is_screenshot"
+                # TODO: check file path and name for "screenshot", update is_screenshot
                 if subdiv == "screenshots":
                     is_screenshot = 1
                     workingcollection = screenshotcollection
@@ -130,7 +131,6 @@ def main():
                 md5check = md5select.fetchone()
                 pathselect = cur.execute("SELECT relativepath FROM media WHERE md5=? AND relativepath=?", (im_md5, relpath))
                 pathcheck = pathselect.fetchone()
-                # TODO: add support for Screenshots table and MongoDB collection
                 if pathcheck is None:  # if MD5 and path aren't in SQLite
                     # TODO: if-else isn't the best way to do this
                     if md5check is None:  # if MD5 is not in SQLite
@@ -167,7 +167,7 @@ def main():
                         logger.info('Image %s is already in MongoDB and SQLite with this path', imagepath)
                         continue
         else:
-            logger.error("No folders found", rootdir, allfolders)
+            logger.error("No folders found. Root folder: %s Folder list: %s", rootdir, allfolders)
             break
 
 
