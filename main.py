@@ -17,10 +17,11 @@ logger = logging.getLogger(__name__)
 
 config = ConfigParser()
 config.read('config.ini')
-rootdir = config.get('storage', 'localimagedir')
-sqldb = config.get('storage', 'sqlitedb')
 subdiv = config.get('properties', 'subdiv')
+rootdir = config.get('divs', subdiv)
+sqldb = config.get('storage', 'sqlitedb')
 mongocollection = config.get('storage', 'mongocollection')
+
 
 # initialize DBs
 con = sqlite3.connect(sqldb)
@@ -39,6 +40,7 @@ currentdb = get_database()
 collection = currentdb[mongocollection]
 collection.create_index([('md5', pymongo.TEXT)], name='md5_index', unique=True)
 collection.create_index('vision_tags')
+
 
 # list all subdirectories in a given folder
 def listdirs(folder):
@@ -83,20 +85,18 @@ allfolders = listdirs(rootdir)
 
 def main():
     while True:
-        tags = []
         if allfolders:
             workingdir = allfolders.pop(0)
             workingimages = listimages(workingdir)
             for imagepath in workingimages:
                 im_md5 = get_md5(imagepath)
+                relpath = os.path.relpath(imagepath, rootdir)
                 md5select = cur.execute("SELECT path FROM media WHERE md5=?", (im_md5,))
                 sqlcheck = md5select.fetchone()
-                # TODO: update this to check MongoDB, remove paths from SQLite
-                # or, remove the unique and key requirements from MD5 and hope the checking logic works
-                pathselect = cur.execute("SELECT path FROM media WHERE md5=? AND path=?", (im_md5, imagepath))
+                pathselect = cur.execute("SELECT path FROM media WHERE md5=? AND path=?", (im_md5, relpath))
                 check_path = pathselect.fetchone()
                 if sqlcheck is None:
-                    # check file path or config file for "screenshot", maybe use subdiv
+                    # TODO: check file path or config file for "screenshot", maybe use subdiv
                     is_screenshot = 0
                     logger.info('=%s MD5 is not in SQLite database', imagepath)
                     logger.info('opening image=%s', imagepath)
@@ -104,10 +104,10 @@ def main():
                     logger.info('getting tags for image=%s', imagepath)
                     tags = tagging.get_tags(image_binary=image_content)
                     text = tagging.get_text(image_binary=image_content)
-                    print(imagepath, tags, text)
+                    print(imagepath, relpath, tags, text)
                     image_array = [imagepath]
                     print(image_array)
-                    cur.execute("INSERT INTO media VALUES (?,?,?,?)", (im_md5, imagepath, is_screenshot, subdiv))
+                    cur.execute("INSERT INTO media VALUES (?,?,?,?)", (im_md5, relpath, is_screenshot, subdiv))
                     con.commit()
                     mongo_entry = {
                         "md5": im_md5,
@@ -115,6 +115,7 @@ def main():
                         "vision_text": text[0],
                         "path": image_array,
                         "subdiv": subdiv,
+                        "relativepath": relpath,
                         "is_screenshot": is_screenshot
                     }
                     mongomd5check = collection.find_one({"md5": im_md5}, {"md5": 1})
@@ -123,14 +124,14 @@ def main():
                     else:
                         logger.error("The hash of =%s is already in MongoDB. Your local SQLite database may not be correct.", imagepath)
                         # TODO: this may not be a good idea
-                        cur.execute("INSERT INTO media VALUES (?,?,?,?)", (im_md5, imagepath, is_screenshot, subdiv))
+                        cur.execute("INSERT INTO media VALUES (?,?,?,?)", (im_md5, relpath, is_screenshot, subdiv))
                         con.commit()
                 if check_path is None:
 
                     # append a path entry
                     collection.update_one(
                         {"md5": im_md5},
-                        {"$addToSet" : {"path" : imagepath}}
+                        {"$addToSet": {"path": imagepath}}
                     )
                     logger.info('Appended path for duplicate, path is =%s', imagepath)
                 else:
