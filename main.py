@@ -106,6 +106,7 @@ def main():
                     text = tagging.get_text(image_binary=image_content)
                     print(imagepath, relpath, tags, text)
                     image_array = [imagepath]
+                    relpath_array = [relpath]
                     print(image_array)
                     cur.execute("INSERT INTO media VALUES (?,?,?,?)", (im_md5, relpath, is_screenshot, subdiv))
                     con.commit()
@@ -115,7 +116,7 @@ def main():
                         "vision_text": text[0],
                         "path": image_array,
                         "subdiv": subdiv,
-                        "relativepath": relpath,
+                        "relativepath": relpath_array,
                         "is_screenshot": is_screenshot
                     }
                     mongomd5check = collection.find_one({"md5": im_md5}, {"md5": 1})
@@ -127,11 +128,11 @@ def main():
                         cur.execute("INSERT INTO media VALUES (?,?,?,?)", (im_md5, relpath, is_screenshot, subdiv))
                         con.commit()
                 if check_path is None:
-
                     # append a path entry
+                    # TODO: check MongoDB to see if path exists in any path entry matching that MD5
                     collection.update_one(
                         {"md5": im_md5},
-                        {"$addToSet": {"path": imagepath}}
+                        {"$addToSet": {"path": imagepath, "relpath": relpath}}
                     )
                     logger.info('Appended path for duplicate, path is =%s', imagepath)
                 else:
